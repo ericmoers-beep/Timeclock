@@ -174,9 +174,9 @@
   .entry-break-note { font-size: 11px; color: var(--break); margin-top: 3px; font-family: 'DM Mono', monospace; }
   .entry-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
   .entry-duration { font-family: 'DM Mono', monospace; font-size: 14px; color: var(--accent); font-weight: 500; }
-  .entry-actions { display: flex; gap: 2px; }
-  .entry-btn { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 15px; padding: 4px 7px; border-radius: 4px; line-height: 1; }
-  .entry-btn:hover { color: var(--text-dim); background: var(--bg); }
+  .entry-actions { display: flex; gap: 4px; }
+  .entry-btn { background: transparent; border: 1px solid var(--border); color: var(--text-muted); cursor: pointer; font-size: 14px; padding: 8px 12px; border-radius: 8px; line-height: 1; min-width: 40px; min-height: 40px; display: flex; align-items: center; justify-content: center; }
+  .entry-btn:active { color: var(--text-dim); background: var(--bg); }
 
   .edit-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .edit-row input[type="time"] { width: auto; padding: 6px 8px; font-size: 13px; flex: 0 0 auto; }
@@ -189,14 +189,6 @@
   .all-time .summary-value { font-size: 20px; }
 
   .empty { text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px; }
-
-  .confirm-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 999; padding: 20px; }
-  .confirm-box { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; max-width: 320px; width: 100%; text-align: center; }
-  .confirm-box p { margin-bottom: 20px; font-size: 14px; color: var(--text-dim); }
-  .confirm-buttons { display: flex; gap: 10px; justify-content: center; }
-  .confirm-buttons button { padding: 10px 24px; border-radius: 8px; font-size: 14px; cursor: pointer; font-family: 'DM Sans', sans-serif; border: none; }
-  .confirm-yes { background: var(--danger); color: #fff; }
-  .confirm-no { background: transparent; color: var(--text-dim); border: 1px solid var(--border) !important; }
 
   .export-section { text-align: center; margin-top: 16px; padding-top: 16px; }
   .export-btn { background: transparent; border: 1px solid var(--border); color: var(--text-muted); border-radius: 20px; padding: 7px 18px; font-size: 12px; cursor: pointer; font-family: 'DM Mono', monospace; transition: all 0.2s; }
@@ -249,15 +241,7 @@
   </div>
 </div>
 
-<div class="confirm-overlay" id="confirmDialog" style="display:none">
-  <div class="confirm-box">
-    <p id="confirmText">Delete this entry?</p>
-    <div class="confirm-buttons">
-      <button class="confirm-no" onclick="closeConfirm()">Cancel</button>
-      <button class="confirm-yes" id="confirmYes">Delete</button>
-    </div>
-  </div>
-</div>
+
 
 <script>
 const JOBS = ["Rhapsody Natural Foods", "Bonté Bakery", "Grounded Support Practice", "Other"];
@@ -271,7 +255,6 @@ let use24 = false;
 let showDecimal = false;
 let showManual = false;
 let editingId = null;
-let confirmCallback = null;
 
 function load() {
   try { const e = localStorage.getItem(STORAGE_KEY); if (e) entries = JSON.parse(e); } catch {}
@@ -403,24 +386,29 @@ function addManualEntry() {
 }
 
 function deleteEntry(id) {
-  confirmCallback = () => { entries = entries.filter(e => e.id !== id); saveEntries(); renderAll(); };
-  document.getElementById("confirmText").textContent = "Delete this entry?";
-  document.getElementById("confirmDialog").style.display = "flex";
-  document.getElementById("confirmYes").onclick = () => { closeConfirm(); if (confirmCallback) confirmCallback(); };
+  if (confirm("Delete this entry?")) {
+    entries = entries.filter(e => e.id !== id);
+    saveEntries();
+    renderAll();
+  }
 }
-function closeConfirm() { document.getElementById("confirmDialog").style.display = "none"; confirmCallback = null; }
 function startEdit(id) { editingId = id; renderEntries(); }
 function cancelEdit() { editingId = null; renderEntries(); }
 function saveEdit(id) {
   const entry = entries.find(e => e.id === id); if (!entry) return;
   const inVal = document.getElementById("editIn").value;
   const outVal = document.getElementById("editOut").value;
+  const breakInput = document.getElementById("editBreak");
+  const breakMin = breakInput ? parseInt(breakInput.value) || 0 : 0;
+  const breakMs = breakMin * 60000;
   const dateStr = new Date(entry.clockIn).toISOString().slice(0, 10);
   const inTs = new Date(dateStr + "T" + inVal).getTime();
   let outTs = new Date(dateStr + "T" + outVal).getTime();
   if (outTs <= inTs) outTs += 86400000;
   entry.clockIn = inTs; entry.clockOut = outTs;
-  entry.duration = (outTs - inTs) - (entry.totalBreakMs || 0);
+  entry.totalBreakMs = breakMs;
+  entry.breaks = breakMs > 0 ? [{ manual: true, ms: breakMs }] : [];
+  entry.duration = (outTs - inTs) - breakMs;
   editingId = null; saveEntries(); renderAll();
 }
 
@@ -561,10 +549,12 @@ function renderEntries() {
       const brk = entry.totalBreakMs || 0;
       const brkNote = brk > 0 ? `<div class="entry-break-note">☕ ${formatBreakDuration(brk)} break</div>` : "";
       if (editingId === entry.id) {
+        const editBreakMin = Math.round((entry.totalBreakMs || 0) / 60000);
         html += `<div class="entry"><div class="edit-row">
           <input type="time" id="editIn" value="${timeToStr(entry.clockIn)}">
           <span class="edit-arrow">→</span>
           <input type="time" id="editOut" value="${timeToStr(entry.clockOut)}">
+          <input type="number" id="editBreak" min="0" max="480" value="${editBreakMin}" placeholder="☕ min" style="width:70px;padding:6px 8px;font-size:13px;text-align:center;background:var(--bg);border:1px solid var(--break);color:var(--break);border-radius:6px;font-family:'DM Mono',monospace;outline:none;-webkit-appearance:none;appearance:none;">
           <button class="edit-save" onclick="saveEdit('${entry.id}')">Save</button>
           <button class="edit-cancel" onclick="cancelEdit()">✕</button>
         </div></div>`;
