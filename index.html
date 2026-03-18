@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Time Clock">
+<title>🌿 Time Clock</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1a1714;
+    --card: #23201b;
+    --card-hover: #2a2620;
+    --accent: #b8956a;
+    --accent-dim: #8a6d4e;
+    --accent-glow: rgba(184, 149, 106, 0.15);
+    --text: #e8e0d4;
+    --text-dim: #9e9484;
+    --text-muted: #6b6158;
+    --border: #3a3530;
+    --danger: #c45c4a;
+    --danger-bg: rgba(196, 92, 74, 0.1);
+    --success: #6a9b6a;
+    --success-bg: rgba(106, 155, 106, 0.12);
+    --break: #c4a24a;
+    --break-bg: rgba(196, 162, 74, 0.12);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', -apple-system, sans-serif;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overscroll-behavior: none;
+  }
+
+  .container {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 24px 16px 100px;
+  }
+
+  .header { text-align: center; margin-bottom: 28px; padding-top: 12px; }
+  .header h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 28px; font-weight: 700; color: var(--accent); letter-spacing: 1px;
+  }
+  .header p { color: var(--text-dim); font-size: 13px; margin-top: 6px; letter-spacing: 0.5px; }
+
+  .controls { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 20px; }
+  .pill {
+    background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+    border-radius: 20px; padding: 7px 16px; font-size: 12px; cursor: pointer;
+    font-family: 'DM Mono', monospace; transition: all 0.2s; user-select: none; -webkit-user-select: none;
+  }
+  .pill.active { background: var(--accent-glow); border-color: var(--accent); color: var(--accent); }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    padding: 22px; margin-bottom: 16px; transition: all 0.3s;
+  }
+  .card.clocked-in {
+    background: linear-gradient(135deg, var(--success-bg), var(--card));
+    border-color: var(--success);
+  }
+  .card.on-break {
+    background: linear-gradient(135deg, var(--break-bg), var(--card));
+    border-color: var(--break);
+  }
+
+  .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px; display: block; }
+  .label-sm { font-size: 10px; color: var(--text-muted); display: block; margin-bottom: 4px; }
+
+  select, input[type="date"], input[type="time"], input[type="number"] {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px;
+    padding: 10px 12px; font-size: 14px; font-family: 'DM Mono', monospace; outline: none; width: 100%;
+    -webkit-appearance: none; appearance: none;
+  }
+  select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239e9484' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; cursor: pointer;
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(0.6); }
+
+  .btn-primary {
+    width: 100%; padding: 15px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+    color: var(--bg); border: none; border-radius: 12px; font-size: 17px; font-weight: 600;
+    cursor: pointer; font-family: 'DM Sans', sans-serif; letter-spacing: 0.5px;
+    transition: transform 0.15s; user-select: none;
+  }
+  .btn-primary:active { transform: scale(0.98); }
+  .btn-danger {
+    padding: 15px;
+    background: linear-gradient(135deg, var(--danger), #a04838);
+    color: #fff; border: none; border-radius: 12px; font-size: 17px; font-weight: 600;
+    cursor: pointer; font-family: 'DM Sans', sans-serif; letter-spacing: 0.5px; transition: transform 0.15s;
+  }
+  .btn-danger:active { transform: scale(0.98); }
+  .btn-break {
+    padding: 15px;
+    background: transparent; border: 1.5px solid var(--break); color: var(--break);
+    border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; letter-spacing: 0.5px; transition: all 0.15s; user-select: none;
+  }
+  .btn-break:active { transform: scale(0.98); }
+  .btn-break.on-break {
+    background: linear-gradient(135deg, var(--break), #a08530);
+    color: var(--bg); border-color: var(--break);
+  }
+  .btn-add {
+    width: 100%; padding: 11px; background: var(--accent); color: var(--bg); border: none;
+    border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif;
+  }
+  .btn-add:disabled { background: var(--border); color: var(--text-muted); cursor: not-allowed; }
+
+  .btn-row { display: flex; gap: 10px; }
+  .btn-row .btn-danger { flex: 1; }
+  .btn-row .btn-break { flex: 1; }
+
+  .timer {
+    text-align: center; padding: 14px 0; font-family: 'DM Mono', monospace;
+    font-size: 40px; font-weight: 500; color: var(--text); letter-spacing: 3px;
+  }
+  @media (max-width: 400px) { .timer { font-size: 32px; } }
+
+  .break-bar {
+    display: flex; justify-content: center; align-items: center; gap: 20px;
+    padding: 8px 0; margin-bottom: 8px;
+  }
+  .break-stat { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .break-stat .break-label { color: var(--text-muted); }
+  .break-stat .break-value { font-family: 'DM Mono', monospace; color: var(--break); font-weight: 500; }
+
+  .active-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .active-status { font-size: 11px; color: var(--success); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 4px; }
+  .active-status.on-break { color: var(--break); }
+  .active-job { font-size: 15px; font-weight: 500; }
+  .active-started-label { font-size: 11px; color: var(--text-muted); margin-bottom: 2px; text-align: right; }
+  .active-started-time { font-family: 'DM Mono', monospace; font-size: 14px; color: var(--accent); text-align: right; }
+
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
+  .summary-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; }
+  .summary-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; }
+  .summary-value { font-family: 'DM Mono', monospace; font-size: 22px; color: var(--accent); font-weight: 500; }
+  @media (max-width: 400px) { .summary-value { font-size: 18px; } }
+
+  .filter-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .filter-row .label { margin-bottom: 0; }
+  .filter-row select { width: auto; font-size: 12px; padding: 5px 30px 5px 10px; }
+
+  .manual-grid { display: grid; gap: 10px; }
+  .manual-time-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  @media (max-width: 420px) { .manual-time-row { grid-template-columns: 1fr; } }
+
+  .day-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  .day-date { font-size: 13px; font-weight: 500; color: var(--text-dim); }
+  .day-total { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--accent-dim); }
+
+  .entry { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 6px; }
+  .entry-main { display: flex; justify-content: space-between; align-items: center; }
+  .entry-job { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
+  .entry-times { font-family: 'DM Mono', monospace; font-size: 12px; color: var(--text-dim); }
+  .entry-break-note { font-size: 11px; color: var(--break); margin-top: 3px; font-family: 'DM Mono', monospace; }
+  .entry-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .entry-duration { font-family: 'DM Mono', monospace; font-size: 14px; color: var(--accent); font-weight: 500; }
+  .entry-actions { display: flex; gap: 2px; }
+  .entry-btn { background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 15px; padding: 4px 7px; border-radius: 4px; line-height: 1; }
+  .entry-btn:hover { color: var(--text-dim); background: var(--bg); }
+
+  .edit-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .edit-row input[type="time"] { width: auto; padding: 6px 8px; font-size: 13px; flex: 0 0 auto; }
+  .edit-arrow { color: var(--text-muted); font-size: 14px; }
+  .edit-save { background: var(--accent); color: var(--bg); border: none; border-radius: 6px; padding: 6px 14px; font-size: 12px; cursor: pointer; font-family: 'DM Sans', sans-serif; }
+  .edit-cancel { background: transparent; color: var(--text-muted); border: 1px solid var(--border); border-radius: 6px; padding: 6px 14px; font-size: 12px; cursor: pointer; font-family: 'DM Sans', sans-serif; }
+
+  .all-time { text-align: center; margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--border); }
+  .all-time .summary-label { margin-bottom: 6px; }
+  .all-time .summary-value { font-size: 20px; }
+
+  .empty { text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px; }
+
+  .confirm-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 999; padding: 20px; }
+  .confirm-box { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; max-width: 320px; width: 100%; text-align: center; }
+  .confirm-box p { margin-bottom: 20px; font-size: 14px; color: var(--text-dim); }
+  .confirm-buttons { display: flex; gap: 10px; justify-content: center; }
+  .confirm-buttons button { padding: 10px 24px; border-radius: 8px; font-size: 14px; cursor: pointer; font-family: 'DM Sans', sans-serif; border: none; }
+  .confirm-yes { background: var(--danger); color: #fff; }
+  .confirm-no { background: transparent; color: var(--text-dim); border: 1px solid var(--border) !important; }
+
+  .export-section { text-align: center; margin-top: 16px; padding-top: 16px; }
+  .export-btn { background: transparent; border: 1px solid var(--border); color: var(--text-muted); border-radius: 20px; padding: 7px 18px; font-size: 12px; cursor: pointer; font-family: 'DM Mono', monospace; transition: all 0.2s; }
+  .export-btn:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="container" id="app">
+  <div class="header">
+    <h1>🌿 Time Clock</h1>
+    <p>Track your hours with care</p>
+  </div>
+
+  <div class="controls">
+    <button class="pill" id="toggleFormat" onclick="toggleTimeFormat()">12H</button>
+    <button class="pill" id="toggleDecimal" onclick="toggleDecimalFormat()">H:M</button>
+    <button class="pill" id="toggleManual" onclick="toggleManualEntry()">+ Manual</button>
+  </div>
+
+  <div class="card" id="clockCard"></div>
+  <div class="card" id="manualCard" style="display:none"></div>
+
+  <div class="summary-grid">
+    <div class="summary-card">
+      <div class="summary-label">Today</div>
+      <div class="summary-value" id="todayTotal">0h 0m</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">This Week</div>
+      <div class="summary-value" id="weekTotal">0h 0m</div>
+    </div>
+  </div>
+
+  <div class="filter-row">
+    <span class="label" style="margin-bottom:0">Time Log</span>
+    <select id="filterJob" onchange="renderEntries()">
+      <option value="All">All Jobs</option>
+      <option value="Rhapsody Natural Foods">Rhapsody Natural Foods</option>
+      <option value="Bonté Bakery">Bonté Bakery</option>
+      <option value="Grounded Support Practice">Grounded Support Practice</option>
+      <option value="Other">Other</option>
+    </select>
+  </div>
+
+  <div id="entriesList"></div>
+  <div id="allTimeFooter" class="all-time" style="display:none"></div>
+  <div id="exportSection" class="export-section" style="display:none">
+    <button class="export-btn" onclick="exportCSV()">Export CSV</button>
+  </div>
+</div>
+
+<div class="confirm-overlay" id="confirmDialog" style="display:none">
+  <div class="confirm-box">
+    <p id="confirmText">Delete this entry?</p>
+    <div class="confirm-buttons">
+      <button class="confirm-no" onclick="closeConfirm()">Cancel</button>
+      <button class="confirm-yes" id="confirmYes">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const JOBS = ["Rhapsody Natural Foods", "Bonté Bakery", "Grounded Support Practice", "Other"];
+const STORAGE_KEY = "timeclock-entries";
+const ACTIVE_KEY = "timeclock-active";
+const SETTINGS_KEY = "timeclock-settings";
+
+let entries = [];
+let activeSession = null;
+let use24 = false;
+let showDecimal = false;
+let showManual = false;
+let editingId = null;
+let confirmCallback = null;
+
+function load() {
+  try { const e = localStorage.getItem(STORAGE_KEY); if (e) entries = JSON.parse(e); } catch {}
+  try { const a = localStorage.getItem(ACTIVE_KEY); if (a) activeSession = JSON.parse(a); } catch {}
+  try {
+    const s = localStorage.getItem(SETTINGS_KEY);
+    if (s) { const st = JSON.parse(s); use24 = st.use24 || false; showDecimal = st.showDecimal || false; }
+  } catch {}
+  if (activeSession && activeSession.totalBreakMs === undefined) {
+    activeSession.onBreak = false;
+    activeSession.breakStart = null;
+    activeSession.totalBreakMs = 0;
+    activeSession.breaks = [];
+    saveActive();
+  }
+}
+
+function saveEntries() { localStorage.setItem(STORAGE_KEY, JSON.stringify(entries)); }
+function saveActive() {
+  if (activeSession) localStorage.setItem(ACTIVE_KEY, JSON.stringify(activeSession));
+  else localStorage.removeItem(ACTIVE_KEY);
+}
+function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ use24, showDecimal })); }
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 9); }
+
+function formatTime(ts) {
+  if (!ts) return "--:--";
+  const d = new Date(ts);
+  if (use24) return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+}
+function formatDate(ts) { return new Date(ts).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); }
+function formatDuration(ms) {
+  if (!ms || ms < 0) return "0h 0m";
+  const totalMin = Math.floor(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (showDecimal) return (ms / 3600000).toFixed(2);
+  return h + "h " + m + "m";
+}
+function formatBreakDuration(ms) {
+  if (!ms || ms < 0) return "0m";
+  const totalMin = Math.floor(ms / 60000);
+  if (totalMin < 60) return totalMin + "m";
+  return Math.floor(totalMin / 60) + "h " + (totalMin % 60) + "m";
+}
+function getWeekStart(ts) {
+  const d = new Date(ts); d.setDate(d.getDate() - d.getDay()); d.setHours(0,0,0,0); return d.getTime();
+}
+function isSameDay(a, b) {
+  const d1 = new Date(a), d2 = new Date(b);
+  return d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
+}
+function timeToStr(ts) { return new Date(ts).toTimeString().slice(0, 5); }
+
+function getCurrentBreakMs() {
+  if (!activeSession) return 0;
+  let total = activeSession.totalBreakMs || 0;
+  if (activeSession.onBreak && activeSession.breakStart) total += Date.now() - activeSession.breakStart;
+  return total;
+}
+function getActiveWorkMs() {
+  if (!activeSession) return 0;
+  return (Date.now() - activeSession.clockIn) - getCurrentBreakMs();
+}
+
+function toggleTimeFormat() { use24 = !use24; saveSettings(); renderAll(); }
+function toggleDecimalFormat() { showDecimal = !showDecimal; saveSettings(); renderAll(); }
+function toggleManualEntry() { showManual = !showManual; renderAll(); }
+
+function clockIn() {
+  const sel = document.getElementById("jobSelect");
+  activeSession = { id: genId(), job: sel.value, clockIn: Date.now(), onBreak: false, breakStart: null, totalBreakMs: 0, breaks: [] };
+  saveActive(); renderAll();
+}
+
+function clockOut() {
+  if (!activeSession) return;
+  if (activeSession.onBreak && activeSession.breakStart) {
+    activeSession.totalBreakMs += Date.now() - activeSession.breakStart;
+    activeSession.breaks.push({ start: activeSession.breakStart, end: Date.now() });
+    activeSession.onBreak = false; activeSession.breakStart = null;
+  }
+  const now = Date.now();
+  const netWork = (now - activeSession.clockIn) - (activeSession.totalBreakMs || 0);
+  entries.unshift({
+    id: activeSession.id, job: activeSession.job, clockIn: activeSession.clockIn, clockOut: now,
+    duration: netWork, totalBreakMs: activeSession.totalBreakMs || 0, breaks: activeSession.breaks || [],
+  });
+  activeSession = null;
+  saveEntries(); saveActive(); renderAll();
+}
+
+function startBreak() {
+  if (!activeSession || activeSession.onBreak) return;
+  activeSession.onBreak = true; activeSession.breakStart = Date.now();
+  saveActive(); renderAll();
+}
+
+function endBreak() {
+  if (!activeSession || !activeSession.onBreak) return;
+  const breakEnd = Date.now();
+  activeSession.totalBreakMs = (activeSession.totalBreakMs || 0) + (breakEnd - activeSession.breakStart);
+  activeSession.breaks = activeSession.breaks || [];
+  activeSession.breaks.push({ start: activeSession.breakStart, end: breakEnd });
+  activeSession.onBreak = false; activeSession.breakStart = null;
+  saveActive(); renderAll();
+}
+
+function addManualEntry() {
+  const job = document.getElementById("manualJob").value;
+  const date = document.getElementById("manualDate").value;
+  const inTime = document.getElementById("manualIn").value;
+  const outTime = document.getElementById("manualOut").value;
+  if (!date || !inTime || !outTime) return;
+  const inTs = new Date(date + "T" + inTime).getTime();
+  let outTs = new Date(date + "T" + outTime).getTime();
+  if (outTs <= inTs) outTs += 86400000;
+  const breakInput = document.getElementById("manualBreak");
+  let manualBreakMs = 0;
+  if (breakInput && breakInput.value) manualBreakMs = parseInt(breakInput.value) * 60000;
+  entries.push({
+    id: genId(), job, clockIn: inTs, clockOut: outTs,
+    duration: (outTs - inTs) - manualBreakMs, totalBreakMs: manualBreakMs,
+    breaks: manualBreakMs > 0 ? [{ manual: true, ms: manualBreakMs }] : [],
+  });
+  entries.sort((a, b) => b.clockIn - a.clockIn);
+  saveEntries(); showManual = false; renderAll();
+}
+
+function deleteEntry(id) {
+  confirmCallback = () => { entries = entries.filter(e => e.id !== id); saveEntries(); renderAll(); };
+  document.getElementById("confirmText").textContent = "Delete this entry?";
+  document.getElementById("confirmDialog").style.display = "flex";
+  document.getElementById("confirmYes").onclick = () => { closeConfirm(); if (confirmCallback) confirmCallback(); };
+}
+function closeConfirm() { document.getElementById("confirmDialog").style.display = "none"; confirmCallback = null; }
+function startEdit(id) { editingId = id; renderEntries(); }
+function cancelEdit() { editingId = null; renderEntries(); }
+function saveEdit(id) {
+  const entry = entries.find(e => e.id === id); if (!entry) return;
+  const inVal = document.getElementById("editIn").value;
+  const outVal = document.getElementById("editOut").value;
+  const dateStr = new Date(entry.clockIn).toISOString().slice(0, 10);
+  const inTs = new Date(dateStr + "T" + inVal).getTime();
+  let outTs = new Date(dateStr + "T" + outVal).getTime();
+  if (outTs <= inTs) outTs += 86400000;
+  entry.clockIn = inTs; entry.clockOut = outTs;
+  entry.duration = (outTs - inTs) - (entry.totalBreakMs || 0);
+  editingId = null; saveEntries(); renderAll();
+}
+
+function exportCSV() {
+  const filter = document.getElementById("filterJob").value;
+  const data = filter === "All" ? entries : entries.filter(e => e.job === filter);
+  let csv = "Job,Date,Clock In,Clock Out,Break (min),Net Hours\n";
+  data.forEach(e => {
+    const dateStr = new Date(e.clockIn).toLocaleDateString("en-US");
+    const inStr = new Date(e.clockIn).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    const outStr = new Date(e.clockOut).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    const breakMin = Math.round((e.totalBreakMs || 0) / 60000);
+    csv += `"${e.job}",${dateStr},${inStr},${outStr},${breakMin},${(e.duration / 3600000).toFixed(2)}\n`;
+  });
+  const blob = new Blob([csv], { type: "text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "timeclock-export.csv"; a.click();
+}
+
+// === Render ===
+function renderAll() { renderPills(); renderClockCard(); renderManualCard(); renderSummary(); renderEntries(); }
+
+function renderPills() {
+  document.getElementById("toggleFormat").textContent = use24 ? "24H" : "12H";
+  document.getElementById("toggleFormat").className = "pill" + (use24 ? " active" : "");
+  document.getElementById("toggleDecimal").textContent = showDecimal ? "Decimal" : "H:M";
+  document.getElementById("toggleDecimal").className = "pill" + (showDecimal ? " active" : "");
+  document.getElementById("toggleManual").className = "pill" + (showManual ? " active" : "");
+}
+
+function renderClockCard() {
+  const card = document.getElementById("clockCard");
+  if (!activeSession) {
+    card.className = "card";
+    card.innerHTML = `
+      <span class="label">Select Job</span>
+      <select id="jobSelect" style="margin-bottom:14px">
+        ${JOBS.map(j => `<option value="${j}">${j}</option>`).join("")}
+      </select>
+      <button class="btn-primary" onclick="clockIn()">▶ Clock In</button>`;
+    return;
+  }
+
+  const isOnBreak = activeSession.onBreak;
+  card.className = "card " + (isOnBreak ? "on-break" : "clocked-in");
+  const workMs = getActiveWorkMs();
+  const breakMs = getCurrentBreakMs();
+
+  let breakBarHtml = "";
+  if (breakMs > 0 || isOnBreak) {
+    breakBarHtml = `
+      <div class="break-bar">
+        <div class="break-stat">
+          <span class="break-label">Working</span>
+          <span class="break-value" id="workDisplay">${formatDuration(workMs)}</span>
+        </div>
+        <div class="break-stat">
+          <span style="color:var(--break)">☕</span>
+          <span class="break-label">Break</span>
+          <span class="break-value" id="breakDisplay">${formatBreakDuration(breakMs)}</span>
+        </div>
+      </div>`;
+  }
+
+  card.innerHTML = `
+    <div class="active-info">
+      <div>
+        <div class="active-status${isOnBreak ? ' on-break' : ''}">${isOnBreak ? '☕ On Break' : '● Clocked In'}</div>
+        <div class="active-job">${activeSession.job}</div>
+      </div>
+      <div>
+        <div class="active-started-label">Started</div>
+        <div class="active-started-time">${formatTime(activeSession.clockIn)}</div>
+      </div>
+    </div>
+    <div class="timer" id="timerDisplay">${formatDuration(workMs)}</div>
+    ${breakBarHtml}
+    <div class="btn-row">
+      <button class="btn-danger" onclick="clockOut()">■ Clock Out</button>
+      ${isOnBreak
+        ? '<button class="btn-break on-break" onclick="endBreak()">▶ End Break</button>'
+        : '<button class="btn-break" onclick="startBreak()">☕ Break</button>'}
+    </div>`;
+}
+
+function renderManualCard() {
+  const card = document.getElementById("manualCard");
+  card.style.display = showManual ? "block" : "none";
+  if (!showManual) return;
+  card.innerHTML = `
+    <span class="label">Add Manual Entry</span>
+    <div class="manual-grid">
+      <select id="manualJob">${JOBS.map(j => `<option value="${j}">${j}</option>`).join("")}</select>
+      <div class="manual-time-row">
+        <div><span class="label-sm">Date</span><input type="date" id="manualDate"></div>
+        <div><span class="label-sm">In</span><input type="time" id="manualIn"></div>
+        <div><span class="label-sm">Out</span><input type="time" id="manualOut"></div>
+      </div>
+      <div>
+        <span class="label-sm">Break (minutes, optional)</span>
+        <input type="number" id="manualBreak" min="0" max="480" placeholder="e.g. 30">
+      </div>
+      <button class="btn-add" onclick="addManualEntry()">Add Entry</button>
+    </div>`;
+}
+
+function renderSummary() {
+  const now = Date.now();
+  const filter = document.getElementById("filterJob").value;
+  const filtered = filter === "All" ? entries : entries.filter(e => e.job === filter);
+  const todayMs = filtered.filter(e => isSameDay(e.clockIn, now)).reduce((s, e) => s + e.duration, 0);
+  const activeToday = activeSession && isSameDay(activeSession.clockIn, now) ? getActiveWorkMs() : 0;
+  const weekStart = getWeekStart(now);
+  const weekMs = filtered.filter(e => e.clockIn >= weekStart).reduce((s, e) => s + e.duration, 0);
+  const activeWeek = activeSession && activeSession.clockIn >= weekStart ? getActiveWorkMs() : 0;
+  document.getElementById("todayTotal").textContent = formatDuration(todayMs + activeToday);
+  document.getElementById("weekTotal").textContent = formatDuration(weekMs + activeWeek);
+}
+
+function renderEntries() {
+  const filter = document.getElementById("filterJob").value;
+  const filtered = filter === "All" ? entries : entries.filter(e => e.job === filter);
+  const list = document.getElementById("entriesList");
+  const footer = document.getElementById("allTimeFooter");
+  const exportSec = document.getElementById("exportSection");
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="empty">No entries yet. Clock in to get started.</div>';
+    footer.style.display = "none"; exportSec.style.display = "none"; return;
+  }
+  const grouped = {};
+  filtered.forEach(e => { const k = new Date(e.clockIn).toISOString().slice(0,10); if (!grouped[k]) grouped[k] = []; grouped[k].push(e); });
+  const dates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+  let html = "";
+  dates.forEach(dk => {
+    const day = grouped[dk];
+    const dayTotal = day.reduce((s, e) => s + e.duration, 0);
+    html += `<div style="margin-bottom:16px"><div class="day-header"><span class="day-date">${formatDate(day[0].clockIn)}</span><span class="day-total">${formatDuration(dayTotal)}</span></div>`;
+    day.forEach(entry => {
+      const brk = entry.totalBreakMs || 0;
+      const brkNote = brk > 0 ? `<div class="entry-break-note">☕ ${formatBreakDuration(brk)} break</div>` : "";
+      if (editingId === entry.id) {
+        html += `<div class="entry"><div class="edit-row">
+          <input type="time" id="editIn" value="${timeToStr(entry.clockIn)}">
+          <span class="edit-arrow">→</span>
+          <input type="time" id="editOut" value="${timeToStr(entry.clockOut)}">
+          <button class="edit-save" onclick="saveEdit('${entry.id}')">Save</button>
+          <button class="edit-cancel" onclick="cancelEdit()">✕</button>
+        </div></div>`;
+      } else {
+        html += `<div class="entry"><div class="entry-main"><div>
+          <div class="entry-job">${entry.job}</div>
+          <div class="entry-times">${formatTime(entry.clockIn)} → ${formatTime(entry.clockOut)}</div>
+          ${brkNote}
+        </div><div class="entry-right">
+          <span class="entry-duration">${formatDuration(entry.duration)}</span>
+          <div class="entry-actions">
+            <button class="entry-btn" onclick="startEdit('${entry.id}')" title="Edit">✎</button>
+            <button class="entry-btn" onclick="deleteEntry('${entry.id}')" title="Delete">✕</button>
+          </div>
+        </div></div></div>`;
+      }
+    });
+    html += "</div>";
+  });
+  list.innerHTML = html;
+  const allTotal = filtered.reduce((s, e) => s + e.duration, 0);
+  footer.style.display = "block";
+  footer.innerHTML = `<div class="summary-label">All Time (${filtered.length} entries)</div><div class="summary-value">${formatDuration(allTotal)}</div>`;
+  exportSec.style.display = "block";
+}
+
+setInterval(() => {
+  if (activeSession) {
+    const el = document.getElementById("timerDisplay");
+    if (el) el.textContent = formatDuration(getActiveWorkMs());
+    const wEl = document.getElementById("workDisplay");
+    if (wEl) wEl.textContent = formatDuration(getActiveWorkMs());
+    const bEl = document.getElementById("breakDisplay");
+    if (bEl) bEl.textContent = formatBreakDuration(getCurrentBreakMs());
+  }
+  renderSummary();
+}, 1000);
+
+load();
+renderAll();
+
+// Register service worker for offline support
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
