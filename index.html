@@ -191,6 +191,13 @@
   .empty { text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px; }
 
   .export-section { text-align: center; margin-top: 16px; padding-top: 16px; }
+
+  .quarter-badge { font-family: 'DM Mono', monospace; font-size: 11px; padding: 2px 8px; border-radius: 10px; background: rgba(184, 149, 106, 0.1); border: 1px solid var(--border); margin-left: 6px; white-space: nowrap; }
+  .quarter-diff { font-family: 'DM Mono', monospace; font-size: 10px; margin-left: 4px; }
+  .quarter-summary { font-family: 'DM Mono', monospace; font-size: 12px; margin-top: 4px; }
+  .rounding-ledger { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; margin-bottom: 24px; text-align: center; }
+  .rounding-ledger .summary-label { margin-bottom: 6px; }
+  .ledger-value { font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 500; }
   .export-btn { background: transparent; border: 1px solid var(--border); color: var(--text-muted); border-radius: 20px; padding: 7px 18px; font-size: 12px; cursor: pointer; font-family: 'DM Mono', monospace; transition: all 0.2s; }
   .export-btn:hover { border-color: var(--accent); color: var(--accent); }
 </style>
@@ -206,6 +213,7 @@
   <div class="controls">
     <button class="pill" id="toggleFormat" onclick="toggleTimeFormat()">12H</button>
     <button class="pill" id="toggleDecimal" onclick="toggleDecimalFormat()">H:M</button>
+    <button class="pill" id="toggleQuarter" onclick="toggleQuarter()">¼H</button>
     <button class="pill" id="toggleManual" onclick="toggleManualEntry()">+ Manual</button>
   </div>
 
@@ -222,6 +230,8 @@
       <div class="summary-value" id="weekTotal">0h 0m</div>
     </div>
   </div>
+
+  <div id="roundingLedger" class="rounding-ledger" style="display:none"></div>
 
   <div class="filter-row">
     <span class="label" style="margin-bottom:0">Time Log</span>
@@ -254,6 +264,7 @@ let activeSession = null;
 let use24 = false;
 let showDecimal = false;
 let showManual = false;
+let showQuarter = false;
 let editingId = null;
 
 function load() {
@@ -261,7 +272,7 @@ function load() {
   try { const a = localStorage.getItem(ACTIVE_KEY); if (a) activeSession = JSON.parse(a); } catch {}
   try {
     const s = localStorage.getItem(SETTINGS_KEY);
-    if (s) { const st = JSON.parse(s); use24 = st.use24 || false; showDecimal = st.showDecimal || false; }
+    if (s) { const st = JSON.parse(s); use24 = st.use24 || false; showDecimal = st.showDecimal || false; showQuarter = st.showQuarter || false; }
   } catch {}
   if (activeSession && activeSession.totalBreakMs === undefined) {
     activeSession.onBreak = false;
@@ -277,7 +288,7 @@ function saveActive() {
   if (activeSession) localStorage.setItem(ACTIVE_KEY, JSON.stringify(activeSession));
   else localStorage.removeItem(ACTIVE_KEY);
 }
-function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ use24, showDecimal })); }
+function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ use24, showDecimal, showQuarter })); }
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 9); }
 
 function formatTime(ts) {
@@ -310,6 +321,37 @@ function isSameDay(a, b) {
 }
 function timeToStr(ts) { return new Date(ts).toTimeString().slice(0, 5); }
 
+function roundToQuarterMs(ms) {
+  // Round to nearest 15 minutes
+  const fifteenMin = 15 * 60000;
+  return Math.round(ms / fifteenMin) * fifteenMin;
+}
+
+function formatQuarter(ms) {
+  const rounded = roundToQuarterMs(ms);
+  const h = (rounded / 3600000).toFixed(2);
+  const totalMin = Math.round(rounded / 60000);
+  const hrs = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  if (showDecimal) return h;
+  return hrs + "h " + mins + "m";
+}
+
+function formatDiffMs(diffMs) {
+  // diffMs = rounded - exact (positive means rounding gave you MORE)
+  const sign = diffMs >= 0 ? "+" : "-";
+  const abs = Math.abs(diffMs);
+  const mins = Math.round(abs / 60000);
+  if (mins === 0) return "even";
+  return sign + mins + "m";
+}
+
+function diffClass(diffMs) {
+  if (diffMs > 0) return "color:var(--success)";
+  if (diffMs < 0) return "color:var(--danger)";
+  return "color:var(--text-muted)";
+}
+
 function getCurrentBreakMs() {
   if (!activeSession) return 0;
   let total = activeSession.totalBreakMs || 0;
@@ -324,6 +366,7 @@ function getActiveWorkMs() {
 function toggleTimeFormat() { use24 = !use24; saveSettings(); renderAll(); }
 function toggleDecimalFormat() { showDecimal = !showDecimal; saveSettings(); renderAll(); }
 function toggleManualEntry() { showManual = !showManual; renderAll(); }
+function toggleQuarter() { showQuarter = !showQuarter; saveSettings(); renderAll(); }
 
 function clockIn() {
   const sel = document.getElementById("jobSelect");
@@ -415,13 +458,15 @@ function saveEdit(id) {
 function exportCSV() {
   const filter = document.getElementById("filterJob").value;
   const data = filter === "All" ? entries : entries.filter(e => e.job === filter);
-  let csv = "Job,Date,Clock In,Clock Out,Break (min),Net Hours\n";
+  let csv = "Job,Date,Clock In,Clock Out,Break (min),Net Hours,Rounded Hours (¼H),Rounding Diff (min)\n";
   data.forEach(e => {
     const dateStr = new Date(e.clockIn).toLocaleDateString("en-US");
     const inStr = new Date(e.clockIn).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
     const outStr = new Date(e.clockOut).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
     const breakMin = Math.round((e.totalBreakMs || 0) / 60000);
-    csv += `"${e.job}",${dateStr},${inStr},${outStr},${breakMin},${(e.duration / 3600000).toFixed(2)}\n`;
+    const roundedMs = roundToQuarterMs(e.duration);
+    const diffMin = Math.round((roundedMs - e.duration) / 60000);
+    csv += `"${e.job}",${dateStr},${inStr},${outStr},${breakMin},${(e.duration / 3600000).toFixed(2)},${(roundedMs / 3600000).toFixed(2)},${diffMin}\n`;
   });
   const blob = new Blob([csv], { type: "text/csv" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "timeclock-export.csv"; a.click();
@@ -435,6 +480,7 @@ function renderPills() {
   document.getElementById("toggleFormat").className = "pill" + (use24 ? " active" : "");
   document.getElementById("toggleDecimal").textContent = showDecimal ? "Decimal" : "H:M";
   document.getElementById("toggleDecimal").className = "pill" + (showDecimal ? " active" : "");
+  document.getElementById("toggleQuarter").className = "pill" + (showQuarter ? " active" : "");
   document.getElementById("toggleManual").className = "pill" + (showManual ? " active" : "");
 }
 
@@ -523,8 +569,38 @@ function renderSummary() {
   const weekStart = getWeekStart(now);
   const weekMs = filtered.filter(e => e.clockIn >= weekStart).reduce((s, e) => s + e.duration, 0);
   const activeWeek = activeSession && activeSession.clockIn >= weekStart ? getActiveWorkMs() : 0;
-  document.getElementById("todayTotal").textContent = formatDuration(todayMs + activeToday);
-  document.getElementById("weekTotal").textContent = formatDuration(weekMs + activeWeek);
+
+  const todayExact = todayMs + activeToday;
+  const weekExact = weekMs + activeWeek;
+
+  let todayHtml = formatDuration(todayExact);
+  let weekHtml = formatDuration(weekExact);
+
+  if (showQuarter) {
+    const todayRounded = roundToQuarterMs(todayExact);
+    const weekRounded = roundToQuarterMs(weekExact);
+    todayHtml += `<div class="quarter-summary" style="${diffClass(todayRounded - todayExact)}">¼H: ${formatQuarter(todayExact)} (${formatDiffMs(todayRounded - todayExact)})</div>`;
+    weekHtml += `<div class="quarter-summary" style="${diffClass(weekRounded - weekExact)}">¼H: ${formatQuarter(weekExact)} (${formatDiffMs(weekRounded - weekExact)})</div>`;
+  }
+
+  document.getElementById("todayTotal").innerHTML = todayHtml;
+  document.getElementById("weekTotal").innerHTML = weekHtml;
+
+  // Rounding ledger
+  const ledger = document.getElementById("roundingLedger");
+  if (showQuarter && filtered.length > 0) {
+    const totalExact = filtered.reduce((s, e) => s + e.duration, 0);
+    const totalRounded = filtered.reduce((s, e) => s + roundToQuarterMs(e.duration), 0);
+    const diff = totalRounded - totalExact;
+    ledger.style.display = "block";
+    ledger.innerHTML = `
+      <div class="summary-label">Rounding Ledger (${filtered.length} shifts)</div>
+      <div class="ledger-value" style="${diffClass(diff)}">${formatDiffMs(diff)}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px">${diff > 0 ? 'Rounding in your favor' : diff < 0 ? 'Rounding costs you' : 'Perfectly balanced'}</div>
+    `;
+  } else {
+    ledger.style.display = "none";
+  }
 }
 
 function renderEntries() {
@@ -544,10 +620,17 @@ function renderEntries() {
   dates.forEach(dk => {
     const day = grouped[dk];
     const dayTotal = day.reduce((s, e) => s + e.duration, 0);
-    html += `<div style="margin-bottom:16px"><div class="day-header"><span class="day-date">${formatDate(day[0].clockIn)}</span><span class="day-total">${formatDuration(dayTotal)}</span></div>`;
+    const dayRounded = day.reduce((s, e) => s + roundToQuarterMs(e.duration), 0);
+    const dayTotalHtml = showQuarter
+      ? `${formatDuration(dayTotal)} <span style="font-size:11px;${diffClass(dayRounded - dayTotal)}">¼H: ${formatQuarter(dayTotal)}</span>`
+      : formatDuration(dayTotal);
+    html += `<div style="margin-bottom:16px"><div class="day-header"><span class="day-date">${formatDate(day[0].clockIn)}</span><span class="day-total">${dayTotalHtml}</span></div>`;
     day.forEach(entry => {
       const brk = entry.totalBreakMs || 0;
       const brkNote = brk > 0 ? `<div class="entry-break-note">☕ ${formatBreakDuration(brk)} break</div>` : "";
+      const rounded = roundToQuarterMs(entry.duration);
+      const diff = rounded - entry.duration;
+      const quarterNote = showQuarter ? `<span class="quarter-badge">¼H: ${formatQuarter(entry.duration)} <span class="quarter-diff" style="${diffClass(diff)}">${formatDiffMs(diff)}</span></span>` : "";
       if (editingId === entry.id) {
         const editBreakMin = Math.round((entry.totalBreakMs || 0) / 60000);
         html += `<div class="entry"><div class="edit-row">
@@ -564,7 +647,7 @@ function renderEntries() {
           <div class="entry-times">${formatTime(entry.clockIn)} → ${formatTime(entry.clockOut)}</div>
           ${brkNote}
         </div><div class="entry-right">
-          <span class="entry-duration">${formatDuration(entry.duration)}</span>
+          <span class="entry-duration">${formatDuration(entry.duration)}${quarterNote}</span>
           <div class="entry-actions">
             <button class="entry-btn" onclick="startEdit('${entry.id}')" title="Edit">✎</button>
             <button class="entry-btn" onclick="deleteEntry('${entry.id}')" title="Delete">✕</button>
@@ -576,8 +659,10 @@ function renderEntries() {
   });
   list.innerHTML = html;
   const allTotal = filtered.reduce((s, e) => s + e.duration, 0);
+  const allRounded = filtered.reduce((s, e) => s + roundToQuarterMs(e.duration), 0);
   footer.style.display = "block";
-  footer.innerHTML = `<div class="summary-label">All Time (${filtered.length} entries)</div><div class="summary-value">${formatDuration(allTotal)}</div>`;
+  const allQuarter = showQuarter ? `<div class="quarter-summary" style="${diffClass(allRounded - allTotal)}">¼H: ${formatQuarter(allTotal)} (${formatDiffMs(allRounded - allTotal)})</div>` : "";
+  footer.innerHTML = `<div class="summary-label">All Time (${filtered.length} entries)</div><div class="summary-value">${formatDuration(allTotal)}${allQuarter}</div>`;
   exportSec.style.display = "block";
 }
 
