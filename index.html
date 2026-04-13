@@ -246,8 +246,10 @@
 
   <div id="entriesList"></div>
   <div id="allTimeFooter" class="all-time" style="display:none"></div>
-  <div id="exportSection" class="export-section" style="display:none">
-    <button class="export-btn" onclick="exportCSV()">Export CSV</button>
+  <div class="export-section">
+    <span id="exportBtn" style="display:none"><button class="export-btn" onclick="exportCSV()">Export CSV</button></span>
+    <button class="export-btn" onclick="document.getElementById('importFile').click()" style="margin-left:8px">Import CSV</button>
+    <input type="file" id="importFile" accept=".csv" style="display:none" onchange="importCSV(event)">
   </div>
 </div>
 
@@ -313,7 +315,7 @@ function formatBreakDuration(ms) {
   return Math.floor(totalMin / 60) + "h " + (totalMin % 60) + "m";
 }
 function getWeekStart(ts) {
-  const d = new Date(ts); d.setDate(d.getDate() - d.getDay()); d.setHours(0,0,0,0); return d.getTime();
+  const d = new Date(ts); const day = d.getDay(); const diff = day === 0 ? 6 : day - 1; d.setDate(d.getDate() - diff); d.setHours(0,0,0,0); return d.getTime();
 }
 function isSameDay(a, b) {
   const d1 = new Date(a), d2 = new Date(b);
@@ -472,6 +474,128 @@ function exportCSV() {
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "timeclock-export.csv"; a.click();
 }
 
+function importCSV(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const text = e.target.result;
+      const lines = text.split('\n').filter(l => l.trim());
+      if (lines.length < 2) { alert("CSV appears empty."); return; }
+
+      // Skip header
+      const header = lines[0].toLowerCase();
+      const imported = [];
+      let skipped = 0;
+
+      for (let i = 1; i < lines.length; i++) {
+        try {
+          // Parse CSV respecting quoted fields
+          const row = [];
+          let current = '';
+          let inQuotes = false;
+          for (const ch of lines[i]) {
+            if (ch === '"') { inQuotes = !inQuotes; continue; }
+            if (ch === ',' && !inQuotes) { row.push(current.trim()); current = ''; continue; }
+            current += ch;
+          }
+          row.push(current.trim());
+
+          if (row.length < 4) { skipped++; continue; }
+
+          const job = row[0];
+          const dateStr = row[1];
+          const inStr = row[2];
+          const outStr = row[3];
+          const breakMin = row.length > 4 ? parseInt(row[4]) || 0 : 0;
+
+          // Parse date + time into timestamps
+          // Try to parse the date (handles M/D/YYYY from en-US locale)
+          const dateParts = dateStr.split('/');
+          let dateObj;
+          if (dateParts.length === 3) {
+            dateObj = new Date(parseInt(dateParts[2]), parseInt(dateParts[0]) - 1, parseInt(dateParts[1]));
+          } else {
+            dateObj = new Date(dateStr);
+          }
+          if (isNaN(dateObj.getTime())) { skipped++; continue; }
+
+          const isoDate = dateObj.toISOString().slice(0, 10);
+
+          // Parse times (handles "09:00 AM", "3:48 PM", "15:48", etc.)
+          function parseTimeStr(tStr, baseDate) {
+            const cleaned = tStr.trim().toUpperCase();
+            const ampm = cleaned.includes('AM') || cleaned.includes('PM');
+            const nums = cleaned.replace(/[^0-9:]/g, '');
+            const parts = nums.split(':');
+            let h = parseInt(parts[0]) || 0;
+            let m = parseInt(parts[1]) || 0;
+            if (ampm) {
+              if (cleaned.includes('PM') && h < 12) h += 12;
+              if (cleaned.includes('AM') && h === 12) h = 0;
+            }
+            const d = new Date(baseDate);
+            d.setHours(h, m, 0, 0);
+            return d.getTime();
+          }
+
+          const clockIn = parseTimeStr(inStr, isoDate);
+          let clockOut = parseTimeStr(outStr, isoDate);
+          if (clockOut <= clockIn) clockOut += 86400000;
+
+          const breakMs = breakMin * 60000;
+          const duration = (clockOut - clockIn) - breakMs;
+
+          imported.push({
+            id: genId(),
+            job: job,
+            clockIn: clockIn,
+            clockOut: clockOut,
+            duration: duration,
+            totalBreakMs: breakMs,
+            breaks: breakMs > 0 ? [{ manual: true, ms: breakMs }] : [],
+          });
+        } catch (err) {
+          skipped++;
+        }
+      }
+
+      if (imported.length === 0) {
+        alert("No valid entries found in CSV.");
+        return;
+      }
+
+      // Check for duplicates (same job + clockIn time)
+      const existingKeys = new Set(entries.map(e => e.job + '|' + e.clockIn));
+      const fresh = imported.filter(e => !existingKeys.has(e.job + '|' + e.clockIn));
+      const dupes = imported.length - fresh.length;
+
+      if (fresh.length === 0) {
+        alert("All " + imported.length + " entries already exist. Nothing imported.");
+        return;
+      }
+
+      const msg = "Import " + fresh.length + " entries?" +
+        (dupes > 0 ? "\n(" + dupes + " duplicates skipped)" : "") +
+        (skipped > 0 ? "\n(" + skipped + " rows couldn't be parsed)" : "");
+
+      if (confirm(msg)) {
+        entries = entries.concat(fresh);
+        entries.sort((a, b) => b.clockIn - a.clockIn);
+        saveEntries();
+        renderAll();
+        alert("Imported " + fresh.length + " entries!");
+      }
+    } catch (err) {
+      alert("Error reading CSV: " + err.message);
+    }
+    // Reset file input so same file can be re-imported
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
 // === Render ===
 function renderAll() { renderPills(); renderClockCard(); renderManualCard(); renderSummary(); renderEntries(); }
 
@@ -608,10 +732,10 @@ function renderEntries() {
   const filtered = filter === "All" ? entries : entries.filter(e => e.job === filter);
   const list = document.getElementById("entriesList");
   const footer = document.getElementById("allTimeFooter");
-  const exportSec = document.getElementById("exportSection");
+  const exportBtn = document.getElementById("exportBtn");
   if (filtered.length === 0) {
-    list.innerHTML = '<div class="empty">No entries yet. Clock in to get started.</div>';
-    footer.style.display = "none"; exportSec.style.display = "none"; return;
+    list.innerHTML = '<div class="empty">No entries yet. Clock in or import a CSV to get started.</div>';
+    footer.style.display = "none"; exportBtn.style.display = "none"; return;
   }
   const grouped = {};
   filtered.forEach(e => { const k = new Date(e.clockIn).toISOString().slice(0,10); if (!grouped[k]) grouped[k] = []; grouped[k].push(e); });
@@ -663,7 +787,7 @@ function renderEntries() {
   footer.style.display = "block";
   const allQuarter = showQuarter ? `<div class="quarter-summary" style="${diffClass(allRounded - allTotal)}">¼H: ${formatQuarter(allTotal)} (${formatDiffMs(allRounded - allTotal)})</div>` : "";
   footer.innerHTML = `<div class="summary-label">All Time (${filtered.length} entries)</div><div class="summary-value">${formatDuration(allTotal)}${allQuarter}</div>`;
-  exportSec.style.display = "block";
+  exportBtn.style.display = "inline";
 }
 
 setInterval(() => {
