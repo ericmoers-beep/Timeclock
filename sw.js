@@ -1,4 +1,4 @@
-const CACHE_NAME = 'timeclock-v4';
+const CACHE_NAME = 'timeclock-v6';
 const ASSETS = [
   './',
   './index.html',
